@@ -10,7 +10,7 @@ class CommandError(Exception):
     def __init__(self, error: bytes = None, msg: str = "Modem returned error response"):
         self.error = error
         self.msg = msg
-        super().__init__(self.msg)
+        super().__init__(f"{self.msg}: {self.error}")
 
 class CommandFailed(Exception):
     """Raised when a command fails"""

@@ -4,7 +4,9 @@ from asyncio.exceptions import IncompleteReadError, TimeoutError, CancelledError
 from datetime import datetime
 from serial.serialutil import SerialException
 import serial_asyncio
-from typing import Type, Callable, List, Tuple
+from typing import Type, Callable, List, Tuple, Optional
+from .utils import fullname
+from . import Response
 from .command import Command
 from .response import Response, UnsolicitedResultCode
 from .exceptions import CommandError, CommandFailed, ModemConnectionError
@@ -13,8 +15,8 @@ import re
 
 AT_PATTERN = re.compile(br'^AT(\+[^?=]+)[?=]{1}')
 
-class ATModem:
 
+class ATModem:
     RESP_SEPERATOR = b'\r\n'
     RESP_TERMINATOR = b'OK'
     CMD_TERMINATOR = b'\r'
@@ -39,7 +41,7 @@ class ATModem:
     async def initialize(self) -> None:
         await self.send_command(Command(b'AT'))
         await self.send_command(Command(b'ATE0'))
-    
+
     async def connect(self) -> None:
         self.reader, self.writer = await serial_asyncio.open_serial_connection(
             url=self.device,
@@ -63,7 +65,7 @@ class ATModem:
 
     async def write(self, command: Command, terminator: bytes = None) -> None:
         terminator = terminator if terminator else self.CMD_TERMINATOR
-        self.writer.write(bytes(command)+terminator)
+        self.writer.write(bytes(command) + terminator)
         await self.writer.drain()
         self.at_logger.debug(command)
 
@@ -85,7 +87,7 @@ class ATModem:
             except CancelledError:
                 return
 
-    async def send_command(self, command: Command, response_terminator: bytes = None, timeout: int = 5) -> List[bytes]:
+    async def send_command(self, command: Command, response_terminator: bytes = None, timeout: Optional[int] = 5) -> Response:
         try:
             async with self.write_lock:
                 # if we acquire a write lock but have a read going, cancel it
@@ -94,7 +96,8 @@ class ATModem:
                 await self.write(command)
                 extended_command = AT_PATTERN.match(bytes(command))
                 expected_response = extended_command.group(1) if extended_command else None
-                response = await self.read_response(expected_response=expected_response, terminator=response_terminator, timeout=timeout)
+                response = await self.read_response(expected_response=expected_response, terminator=response_terminator,
+                                                    timeout=timeout)
                 self.at_logger.debug(response)
                 return response
         except SerialException as e:
@@ -104,15 +107,20 @@ class ATModem:
             self.at_logger.error(f'Failed to send command: {command}', exc_info=True)
             raise CommandFailed from e
 
-    async def read_response(self, expected_response: bytes = None, seperator: bytes = None, terminator: bytes = None, timeout: int = 5) -> Response:
+    async def read_response(self, expected_response: bytes = None, seperator: bytes = None, terminator: bytes = None,
+                            timeout: Optional[int] = 5) -> Response:
         seperator = seperator if seperator else self.RESP_SEPERATOR
         terminator = terminator if terminator else self.RESP_TERMINATOR
         response_chunks = []
         while True:
             try:
                 response_chunk = await self.read(seperator, timeout)
-            except:
-                self.at_logger.debug(f'Read error, partial response: {response_chunks}')
+                self.at_logger.debug(f'Got chunk {response_chunk}')
+            except asyncio.TimeoutError:
+                self.at_logger.debug(f'Read error, no response after {timeout}s timeout.')
+                raise
+            except Exception as e:
+                self.at_logger.debug(f'Read error "{fullname(e)}", partial response: {response_chunks}')
                 raise
 
             error_code = next(filter(lambda error_code: response_chunk.startswith(error_code), self.error_codes), None)
@@ -166,14 +174,14 @@ class ATModem:
 
     async def urc_handler(self, response: UnsolicitedResultCode) -> None:
         pass
-                
+
     async def read_loop(self):
         while True:
             try:
                 if not self.write_lock.locked() and not self.read_lock.locked():
                     response = await self.read_response()
                     if response:
-                        self.at_logger.warn(f'Unexpected response received: {response}')
+                        self.at_logger.warning(f'Unexpected response received: {response}')
             except TimeoutError:
                 pass
             await asyncio.sleep(0.1)
@@ -189,3 +197,4 @@ class ATModem:
             except CancelledError:
                 self.at_logger.debug('Read loop cancelled successfully')
                 return True
+
