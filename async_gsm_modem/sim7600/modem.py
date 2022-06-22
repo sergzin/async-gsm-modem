@@ -1,5 +1,3 @@
-import asyncio.exceptions
-
 from ..base.modem import ATModem
 from ..base.response import Response
 from ..base.command import Command, ExtendedCommand

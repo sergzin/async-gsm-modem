@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from asyncio.exceptions import IncompleteReadError, TimeoutError, CancelledError
+from asyncio import IncompleteReadError, TimeoutError, CancelledError
 from datetime import datetime
 from serial.serialutil import SerialException
 import serial_asyncio
