@@ -213,3 +213,18 @@ class Modem(ATModem):
         """
         command = ExtendedCommand(b'AT+CCMXPLAY').write(path, b'1')
         await self.send_command(command, response_terminator=b'+AUDIOSTATE: audio play stop', timeout=300)
+
+    async def play_TTS(self, message:str):
+        """
+        play text to speech using built it TTS generator.
+        AT+CDTAM=<mode>
+        <mode> Set TTS play path, local or remote. Default value is 0.
+            0 – Local path, meaning to local audio jack.
+            1 – Remote path, meaning to remote caller.
+        AT+CTTS=<mode>[,<text>]
+        2 – <text> is in ASCII coding format for English,Chinese text is in
+            GBK coding format. Start to synth and play
+        """
+        command = ExtendedCommand(b'AT+CTTS')
+        await self.send_command(Command(b'AT+CDTAM=1'))
+        await self.send_command(command.write(b'2', f'"{message}"'.encode()))
