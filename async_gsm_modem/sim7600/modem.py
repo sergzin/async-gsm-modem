@@ -34,6 +34,10 @@ class Modem(ATModem):
             revision=response[2].replace('Revision: ', '')
         )
 
+    async def service_provider(self):
+        response = await self.send_command(ExtendedCommand(b'AT+CSPN').read())
+        return response[0].decode()
+
     async def imei(self):
         response = await self.send_command(Command(b'AT+GSN'))
         return response[0].decode()
@@ -177,7 +181,7 @@ class Modem(ATModem):
         command = ExtendedCommand(b'AT+CLCC').execute()
         resp = await self.send_command(command)
         if resp:
-            print(resp)
+            # print(resp)
             idx, direction, stat, mode, conf, *rest = resp[0].replace(b'+CLCC:', b'').strip().split(b',')
             return VoiceCall(
                 index=int(idx),
@@ -201,7 +205,7 @@ class Modem(ATModem):
         command = ExtendedCommand(b'AT+FSLS').execute()
         return await self.send_command(command)
 
-    async def play_recording(self, path: bytes):
+    async def play_recording(self, path: bytes, timeout=300):
         """
         Play recording from flash to remote party. Only during active call.
         AT+CCMXPLAY=<filename>[,<play_path>][,<repeat>]
@@ -212,9 +216,24 @@ class Modem(ATModem):
         <filename> The location and name of wav file.
         """
         command = ExtendedCommand(b'AT+CCMXPLAY').write(path, b'1')
-        await self.send_command(command, response_terminator=b'+AUDIOSTATE: audio play stop', timeout=300)
+        await self.send_command(command, response_terminator=b'+AUDIOSTATE: audio play stop', timeout=timeout)
 
-    async def play_TTS(self, message:str):
+    async def start_audio_recording(self, path: bytes):
+        """
+        Record an audio message from remote side (via audio call) and save it local flash card
+        AT+CREC=<play_path>,<filename>
+        play_path
+            1 - local input such as microphone (via jack cable)
+            2 - remote input (active voice call)
+
+        """
+        command = ExtendedCommand(b'AT+CREC').write(b'2', path)
+        await self.send_command(command)
+
+    async def stop_audio_recording(self):
+        await self.send_command(ExtendedCommand(b'AT+CREC').write(b'0'), response_terminator=b'+CREC: 0')
+
+    async def play_TTS(self, message: str, timeout=60):
         """
         play text to speech using built it TTS generator.
         AT+CDTAM=<mode>
@@ -225,6 +244,7 @@ class Modem(ATModem):
         2 – <text> is in ASCII coding format for English,Chinese text is in
             GBK coding format. Start to synth and play
         """
-        command = ExtendedCommand(b'AT+CTTS')
+        playtts_command = ExtendedCommand(b'AT+CTTS')
         await self.send_command(Command(b'AT+CDTAM=1'))
-        await self.send_command(command.write(b'2', f'"{message}"'.encode()))
+        await self.send_command(playtts_command.write(b'2', f'"{message}"'.encode()), response_terminator=b'+CTTS:0',
+                                timeout=timeout)

@@ -54,10 +54,11 @@ UNSOLICITED_RESULT_CODES = [
     (b'+QIND', 1),
     (b'POWERED DOWN', 1),
     (b'+CGEV', 1),
-    # (b'NO CARRIER', 1),
-    # (b'RING', 1),
-    # (b'BUSY', 1),
-    # (b'VOICE CALL', 1),
+    (b'NO CARRIER', 1),
+    (b'RING', 1),
+    (b'BUSY', 1),
+    (b'VOICE CALL', 1),
+    (b'MISSED_CALL', 2),
 ]
 
 CALL_DIR = {
